@@ -1,11 +1,14 @@
 # Magic Attribute Protocol
-### A system for mapping arbitrary hyper media to a global identifier.
+
+### A Key/Value Datastore Protocol for Bitcoin
+
+Version: 2
 
 Prefix: *1PuQa7K62MiKCtssSLKy1kh56WWU7MtUR5*
 
-Authors: [Satchmo](https://github.com/rohenaz?affiliate=$satchmo), [Attila Aros](https://github.com/attilaaf?affiliate=$attila)
+Authors: [Satchmo](https://github.com/rohenaz), [Attila Aros](https://github.com/attilaaf)
 
-Thanks to [Unwriter](https://github.com/unwriter) for his input and support.
+Thanks to [Unwriter](https://github.com/unwriter) for his input and support on the original specification.
 
 ## Intro
 
@@ -14,17 +17,7 @@ The design goals:
 - A simple OP_RETURN protocol for associating data in a single transaction by defining key, value pairs.
 - A flexible protocol suitable for many applications
 - Compatible with faucets, and other situations where the input address does not represent the author's public identity
-- Provide data mapping without enforcing a content or identity scheme (allow other protocols to provide this).
-
-## Usage
-
-```markdown
-<OP_RETURN | <input>>
-MAP
-<SET | DELETE>
-<key>
-<value>
-```
+- Provide data mapping without enforcing a content, authority or identity scheme (allow other protocols to provide this).
 
 #### Use cases
 - map a comment to a url
@@ -32,28 +25,215 @@ MAP
 - map a photo to a geolocation
 - map a 'type' to some data (this is a 'post' or a 'reply')
 - map ______ to a _______
+- add metadata to a metanet node
+- map a metanet node to a node in another tree
+
+## Inspiration
+
+In Javascript, localStorage is a familiar and easy to use API. It has methods `setItem(key, value)` and `removeItem(key)`. 
+Map has two commands for setting single key value pairs: `SET` and `REMOVE`.
+
+A [Javascript  Set](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set) has methods `add` and `delete`. Similarly, MAP has `ADD` and `DELETE` commands.
+
+The context for these is set by the browser session and current http domain. We can use MAP's `SELECT` command to specify a transaction id as a context before executing one of these commands. To omit a `SELECT` is effectively using the transaction itself as the context.
+
+In web programming, your `window` is the global context. Since Bitcoin is a giant shared context, you need to specify where you are in the graph.
+
+| JS                                    | MAP               |
+| -----------                           | -----------       |
+| localStorage.setItem(key, value)      | SET key value     |
+| localStorage.removeItem(key)          | REMOVE key        |
+| let key = new Set(); key.add(value)   | ADD key, value    |
+| key.delete(value)                     | DELETE key, value |
+| localStorage.clear() / Set.clear()    | CLEAR `txid`      |
+
+# Usage
+
+`OP_FALSE OP_RETURN 1PuQa7K62MiKCtssSLKy1kh56WWU7MtUR5 <command> ...`
+
+## Commands
+
+Single Value Commands: 
+
+[`SET`](#SET), [`SELECT`](#SELECT) + [`REMOVE`](#REMOVE)
+
+Array / List Commands:
+
+ [`ADD`](#ADD), [`SELECT`](#SELECT) + [`DELETE`](#DELETE)
+ 
+ Delete:
+
+ [`CLEAR`](#CLEAR)
+
+Command Separator: 
+
+[`:::`](#Command&nbsp;Separator)
+
+
+___
+
+## Single Key / Value
+
+These commands are used on a single key/value pair.
+
+#### SET
+
+SET is the original and most common MAP command. It associates a key with a given value.
+
+```markdown
+SET
+<key>
+<value>
+...
+```
+
+#### REMOVE
+
+Used in conjunction with SELECT. REMOVE is used to remove a previously SET key or all list values at once. Not needed when using metanet protocol.
+
+```markdown
+SELECT
+<txid>
+REMOVE
+<key> ...
+```
+
+## Array / List
+
+These commands are used to set and remove members of a list.
+
+#### ADD
+
+Add one or more values to a list.
+
+```markdown
+ADD
+<key>
+<value> ...
+```
+
+#### DELETE
+
+Used in conjunction with SELECT. Remove one or more values from a list. (Not needed when using metanet protocol.)
+
+```markdown
+SELECT
+<txid>
+DELETE
+<key>
+<value> ...
+```
+
+## Clear
+#### CLEAR
+
+Clear is like deleting every MAP value for a given tx, whether it is an array or a key/value pair. You can repeat txid to clear many txs at once.
+
+```markdown
+CLEAR
+<txid> ...
+```
+
+## Metanet + MAP Delete / Remove
+
+When using in conjunction with metanet protocol, it is preferred to instead write a new version of the metanet node to replace the outdated one. This eliminates the need to use REMOVE or DELETE in many cases.
+
+## Context
+
+#### SELECT
+
+Designates a context by txid. If this is a metanet node, the command applies to that node and its children.
+
+```markdown
+SELECT
+<txid>
+<cmd (SET | REMOVE | ADD | DELETE)>
+?...
+```
+
+Note, SELECT should be used only once per instruction set since it sets the context for the subsequent commands. 
+
+# Command Separator
+
+Use the command separator `:::` to declare multiple MAP commands in a single transaction. These commands are considered to be part of the same instruction set.
+
+```markdown
+MAP
+SET
+key
+val
+:::
+ADD
+key2
+val
+val
+val
+:::
+ADD
+key3
+val
+val
+val
+:::
+```
+
+This evaluates to all three commands in a single output (without repeating the protocol prefix and pipe):
+
+`MAP SET key val`
+
+`MAP ADD key2 val val val`
+
+`MAP ADD key3 val val val`
 
 #### PROTOCOL PIPELINE
 
-MAP is designed to be chained together with other OP_RETURN micro-protocols. The input stream flows from the left and can be piped like unix commands. We chain content from B protocol, and map it to some global identifier (txhash, url etc), and finally sign that using the Author Identity protocol:
+MAP is designed to be chained together with other OP_RETURN protocols. The input stream flows from the left and can be piped like unix commands. For example, we can select a particular Metanet node, add content from B protocol, and associate attributes such as known global identifiers (txhash, url etc), and finally sign that using the Author Identity protocol:
 
-    B | MAP | AUTHOR_IDENTITY
+    META | B | MAP | AIP
 
-- Read more about [B protocol]( https://github.com/unwriter/B)
-- Read more about [protocol pipeline](https://github.com/unwriter/Bitcom/issues/2) 
-- Read more about [Author Identity Protocol](https://github.com/BitcoinFiles/AUTHOR_IDENTITY_PROTOCOL)
+More about Metanet protocol:
+- https://nchain.com/en/the-metanet/
+
+More about B protocol:
+- https://github.com/unwriter/B
+
+More on protocol pipeline:
+- https://github.com/unwriter/Bitcom/issues/2
+
+More on Author Identity Protocol:
+- https://github.com/opldotdev/AIP
+
+#### Multiple Outputs
+
+Transactions with multiple `OP_RETURN` outputs are valid on Bitcoin SV. This was not always the case — earlier node software accepted only a single `OP_RETURN` output per transaction.
+
+This allows the protocol pipelining to have a more specific meaning, and MAP instructions to be spread across multiple outputs when appropriate.
+
+for example, we might have written a transaction that updates the values of multiple previously defined MAP instruction sets:
+
+`MAP SELECT <tx1> DELETE key val1 val2 ::: REMOVE key4 | MAP SELECT <tx2> DELETE key val1 val2 ::: REMOVE key4`
+
+Since the pipe is used merely as a protocol separator in this example and has no "data flow", we can instead break the instruction sets into multiple outputs:
+
+output1: 
+`MAP SELECT <tx1> DELETE key val1 val2 ::: REMOVE key4`
+
+output2:
+`MAP SELECT <tx2> DELETE key val1 val2 ::: REMOVE key4`
 
 # Examples
+
 ## SET
 In this example we will use `SET` to comment on a URL with an identity (not using the sender address as the identity's public key). Here is a simple piped OP_RETURN sequence for mapping B data to a global ID, `url` = `https://map.sv`.
 
 ```
-OP_RETURN B | MAP SET 'url' 'https://map.sv' | AUTHOR_IDENTITY_PROTOCOL
+OP_FALSE OP_RETURN B <data> <content-type> <encoding> | MAP SET 'url' 'https://twitter.com' | AUTHOR_IDENTITY_PROTOCOL <sig_type> <address> <signature>
 ```
 
-A more detailed view of the same transaction. Each line here is a new pushdata:
+A more detailed view of the same transaction. This is a comment on markdown formatted B protocol comment on the url 'https://twitter.com'. Each line here is a new pushdata:
 
 ```markdown
+OP_FALSE
 OP_RETURN
 19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut (B)
 "## Hello small world"
@@ -63,42 +243,15 @@ utf8
 1PuQa7K62MiKCtssSLKy1kh56WWU7MtUR5 (MAP)
 'SET'
 'url'
-'https://map.sv'
+'https://twitter.com'
 |
 15PciHG22SNLQJXMoSUaWVi7WSqc7hCfva (AUTHOR_IDENTITY)
 'BITCOIN_ECDSA'
-<pubkey>
+<address>
 <signature>
  ```
 
-Constructing a BitQuery for MAP data for a given url still assumes a 'fixed protocol' for now, but soon we will release some tools for searching 'relative to protocol'. There are some projects in the works to make querying / working with this protocol much nicer in the future.
 
-A response from BITDB for a comment on a URL would look something like this:
-```json
-{
-  "c": [{
-    "i": 0,
-    "b0": { "op": 106 },
-    "s1": "19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut",
-    "s2": "## Hello small world",
-    "s3": "text/markdown",
-    "s4": "utf8",
-    "s5": "|",
-    "s6": "1PuQa7K62MiKCtssSLKy1kh56WWU7MtUR5",
-    "s7": "SET",
-    "s8": "url",
-    "s9": "https://twitter.com/",
-    "s10": "|",
-    "s11": "15PciHG22SNLQJXMoSUaWVi7WSqc7hCfva",
-    "s12": "ecdsa",
-    "s13": "1HQ8momxTp9MYkzDLy9bFMUQgnba189qZE",
-    "s14": "<signature>"
-  }],
-  "u": []
-}
-```
-
-## SET Multiple Keys at once
 Keys and values can be repeated to set multiple attributes at once:
 ```
 MAP
@@ -111,20 +264,92 @@ SET
 more detailed example:
 ```
 1PuQa7K62MiKCtssSLKy1kh56WWU7MtUR5 (MAP)
-SET
+'SET'
 'app'
-'my cool app'
-'profile.link'
-'https://mywebsite.com'
-'profile.name'
-'username123'
+'metalens'
+'type'
+'comment'
+'url'
+'https://twitter.com'
+```
+Using a BMAP Planaria you can easily [query](https://b.map.sv/query/ewogICJ2IjogMywKICAicSI6IHsKICAgICJmaW5kIjogewogICAgICAiTUFQLnR5cGUiOiAiY29tbWVudCIsCiAgICAgICJNQVAudXJsIjogImh0dHBzOi8vdHdpdHRlci5jb20vIgogICAgfSwKICAgICJzb3J0IjogewogICAgICAiYmxrLmkiOiAtMQogICAgfSwKICAgICJsaW1pdCI6IDEwCiAgfQp9) for records related to this url:
+
+```json
+{
+  "q": {
+    "find": {
+      "MAP.app": "metalens",
+      "MAP.type": "comment",
+      "MAP.url": "https://twitter.com/"
+    }
+  }
+}
 ```
 
-## DELETE: Remove Profile Data
-To delete one of the keys->value mappings from the example above.
+and you'll get a response like this:
+
+```json
+{
+  "c": [{
+    "i": 0,
+    "B": {
+      "content": "## Hello small world",
+      "content-type": "text/markdown",
+      "encoding": "utf8"
+    },
+    "MAP": {
+      "cmd": "SET",
+      "app": "metalens",
+      "type": "comment",
+      "url": "https://twitter.com/"
+    },
+    "AIP": {
+      "address": "15PciHG22SNLQJXMoSUaWVi7WSqc7hCfva",
+      "signature_type": "BITCOIN_ECDSA",
+      "signature": <signature>
+    }
+  }],
+  "u": []
+}
+```
+
+This is an example response from a traditional Planaria such as [Genesis](https://genesis.bitdb.network/query/1FnauZ9aUH2Bex6JzdcV4eNX7oLSSEbxtN/ewogICJ2IjogMywKICAicSI6IHsKICAgICJmaW5kIjogewogICAgICAidHguaCI6ICIwMmJjOGFmNWRhN2RjMmM3NGE0NTk2YmYyNzU3MTFhNmUwZjBkMTg5MjczMGE0MTg0YmQ0NDliMTJjNWIxMGM2IgogICAgfSwKICAgICJsaW1pdCI6IDEwCiAgfQp9) for the same comment:
+
+```json
+{
+  "c": [{
+    "i": 0,
+    "b0": { "op": 106 },
+    "s1": "19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut",
+    "s2": "## Hello small world",
+    "s3": "text/markdown",
+    "s4": "utf8",
+    "s5": "|",
+    "s6": "1PuQa7K62MiKCtssSLKy1kh56WWU7MtUR5",
+    "s7": "SET",
+    "s8": "app",
+    "s9": "metalens",
+    "s10": "type",
+    "s11": "comment",
+    "s12": "url",
+    "s13": "https://twitter.com/",
+    "s14": "|",
+    "s15": "15PciHG22SNLQJXMoSUaWVi7WSqc7hCfva",
+    "s16": "BITCOIN_ECDSA",
+    "s17": "1HQ8momxTp9MYkzDLy9bFMUQgnba189qZE",
+    "s18": "<signature>"
+  }],
+  "u": []
+}
+```
+
+## REMOVE: Remove Profile Data
+To remove one of the keys->value mappings from the example above.
 ```
 1PuQa7K62MiKCtssSLKy1kh56WWU7MtUR5 (MAP)
-'DELETE'
+'SELECT'
+<txid>
+'REMOVE'
 'profile.name'
 ```
 
@@ -203,8 +428,8 @@ Follow / Unfollow users
 
 ```
 Memo
-Follow user	0x6d06	address(35)		
-Unfollow user	0x6d07	address(35)		
+Follow user:	0x6d06	address(35)		
+Unfollow user:	0x6d07	address(35)		
 
 MAP
 MAP SET 'follow.user' <address>
@@ -214,8 +439,8 @@ MAP SET 'unfollow.user' <address>
 Follow / unfollow topic
 ```
 Memo
-Topic follow	0x6d0d	<topic_name>(variable)		
-Topic unfollow	0x6d0e	<topic_name>(variable)	
+Topic follow:	0x6d0d	<topic_name>
+Topic unfollow:	0x6d0e	<topic_name>
 
 MAP
 MAP SET 'follow.topic' <topic_name>
@@ -287,3 +512,88 @@ Comment on a UPC code
 ```
 B <message> <content-type> <encoding> | MAP SET 'type' 'comment' 'upc' <upc_code>
 ```
+
+
+## MAP + MetaNet with Bitcoin Schema
+
+Lets say we want to create the following metanet structure:
+
+![Sample Profile](images/profile_node.svg)
+
+
+We use metanet protocol to describe the relationship between the nodes, and MAP to define metadata on each node. 
+
+#### Bitcoin Schema
+Bitcoin Schema is a declarative syntax for creating bitcoin transactions using META and MAP protocols.
+
+Bmapjs can convert BitcoinSchema
+
+```json
+{
+  "_bitcoinSchemaVersion": "0.0.1",
+  "profile": {
+    "name": "someone",
+    "interests": ["cars","science"],
+    "paymail": ["satchmo@handcash.io", "satchmo@moneybutton.com"]  
+  }
+}
+```
+
+The key/value pairs will be converted to MAP commands yielding structure:
+
+Tx 1 (Root node)
+```markdown
+OP_FALSE
+OP_RETURN
+META
+null
+|
+MAP
+SET
+_nodeName
+profile
+```
+
+Tx 2 (child node)
+```markdown
+  OP_FALSE
+  OP_RETURN
+  META
+  <address>
+  <txid of root node>
+  |
+  MAP
+  SET
+  name
+  someone
+  :::
+  ADD
+  interests
+  cars
+  science
+```
+
+# Example Transactions
+
+MetaLens Comment
+*`b14113a50b2d1c2a3644346662de921a60e1ed63bee9962dd4c7f7ee8a1f3ffb`*
+
+[[BMAP]](https://b.map.sv/query/ewogICJ2IjogMywKICAicSI6IHsKICAgICJmaW5kIjogewogICAgICAidHguaCI6ICJiMTQxMTNhNTBiMmQxYzJhMzY0NDM0NjY2MmRlOTIxYTYwZTFlZDYzYmVlOTk2MmRkNGM3ZjdlZThhMWYzZmZiIgogICAgfSwKICAgICJzb3J0IjogewogICAgICAiYmxrLmkiOiAtMQogICAgfSwKICAgICJsaW1pdCI6IDEwCiAgfQp9) [[Genesis]](https://genesis.bitdb.network/query/1FnauZ9aUH2Bex6JzdcV4eNX7oLSSEbxtN/ewogICJ2IjogMywKICAicSI6IHsKICAgICJmaW5kIjogewogICAgICAidHguaCI6ICJiMTQxMTNhNTBiMmQxYzJhMzY0NDM0NjY2MmRlOTIxYTYwZTFlZDYzYmVlOTk2MmRkNGM3ZjdlZThhMWYzZmZiIgogICAgfSwKICAgICJsaW1pdCI6IDEwCiAgfQp9) [[WhatsOnChain]](https://whatsonchain.com/tx/b14113a50b2d1c2a3644346662de921a60e1ed63bee9962dd4c7f7ee8a1f3ffb)
+
+TonicPow Campaign Request
+*`219776d570037ce56d4df03ba188999f093002a023413ffdb2b5d87bb18aeea0`*
+
+[[BMAP]](https://b.map.sv/query/ewogICJ2IjogMywKICAicSI6IHsKICAgICJmaW5kIjogewogICAgICAidHguaCI6IjIxOTc3NmQ1NzAwMzdjZTU2ZDRkZjAzYmExODg5OTlmMDkzMDAyYTAyMzQxM2ZmZGIyYjVkODdiYjE4YWVlYTAiCiAgICB9LAogICAgInNvcnQiOiB7CiAgICAgICJibGsuaSI6IC0xCiAgICB9LAogICAgImxpbWl0IjogMTAKICB9Cn0=) [[Genesis]](https://genesis.bitdb.network/query/1FnauZ9aUH2Bex6JzdcV4eNX7oLSSEbxtN/ewogICJ2IjogMywKICAicSI6IHsKICAgICJmaW5kIjogewogICAgICAidHguaCI6IjIxOTc3NmQ1NzAwMzdjZTU2ZDRkZjAzYmExODg5OTlmMDkzMDAyYTAyMzQxM2ZmZGIyYjVkODdiYjE4YWVlYTAiCiAgICB9LAogICAgImxpbWl0IjogMTAKICB9Cn0=) [[WhatsOnChain]](https://whatsonchain.com/tx/219776d570037ce56d4df03ba188999f093002a023413ffdb2b5d87bb18aeea0)
+
+## Release Notes
+
+#### Version 2
+
+- Added `ADD`, `REMOVE`, `SELECT`, `CLEAR` commands. 
+- Added `:::` command separator. 
+- Updated readme.
+
+## Original Authors
+Satchmo, Attila Aros
+
+Thanks to Unwriter for the input and support.
