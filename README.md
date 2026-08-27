@@ -6,6 +6,10 @@ Version: 2
 
 Prefix: *1PuQa7K62MiKCtssSLKy1kh56WWU7MtUR5*
 
+Authors: [Satchmo](https://github.com/rohenaz), [Attila Aros](https://github.com/attilaaf)
+
+Thanks to [Unwriter](https://github.com/unwriter) for his input and support on the original specification.
+
 ## Intro
 
 The design goals:
